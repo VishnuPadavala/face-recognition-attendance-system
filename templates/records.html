@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Attendance Records - Face Recognition Attendance System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Attendance Logs</h1>
+        <p class="page-subtitle">Track, filter, and export daily attendance logs.</p>
+    </div>
+</div>
+
+<!-- Filter controls card -->
+<div class="glass-card" style="margin-bottom: 2rem;">
+    <form action="{{ url_for('records') }}" method="GET" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) 120px 180px; gap: 1rem; align-items: end;">
+        
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="date_filter" class="form-label">Filter by Date</label>
+            <input type="date" id="date_filter" name="date_filter" value="{{ date_filter or '' }}" class="form-control">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0;">
+            <!-- Placeholder for alignment or additional filters in the future -->
+        </div>
+
+        <div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">
+                <i class="fa-solid fa-filter"></i> Filter
+            </button>
+        </div>
+
+        <div>
+            {% if date_filter %}
+                <a href="{{ url_for('records') }}" class="btn btn-secondary" style="width: 100%;">
+                    <i class="fa-solid fa-rotate-left"></i> Reset Filter
+                </a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<!-- Records table card -->
+<div class="glass-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+        <h3>
+            {% if date_filter %}
+                Logs for {{ date_filter }} ({{ records|length }} records)
+            {% else %}
+                All Attendance Logs ({{ records|length }} records)
+            {% endif %}
+        </h3>
+        
+        {% if records %}
+            <a href="{{ url_for('download_csv', date_filter=date_filter) }}" class="btn btn-accent">
+                <i class="fa-solid fa-file-csv"></i> Download CSV Report
+            </a>
+        {% endif %}
+    </div>
+
+    <div class="table-container">
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>Record ID</th>
+                    <th>User ID</th>
+                    <th>Name</th>
+                    <th>Department</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if records %}
+                    {% for r in records %}
+                        <tr>
+                            <td>#{{ r.id }}</td>
+                            <td><strong>{{ r.user_id }}</strong></td>
+                            <td>{{ r.name }}</td>
+                            <td>{{ r.department }}</td>
+                            <td>{{ r.date }}</td>
+                            <td>{{ r.time }}</td>
+                            <td><span class="badge badge-success">{{ r.status }}</span></td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                            <i class="fa-solid fa-magnifying-glass" style="font-size: 2.5rem; margin-bottom: 1rem; display: block; color: var(--text-muted);"></i>
+                            No attendance records matching the criteria.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

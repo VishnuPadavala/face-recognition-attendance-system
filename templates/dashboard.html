@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Face Recognition Attendance System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Welcome back, Admin</h1>
+        <p class="page-subtitle">Here is the real-time status of your attendance system.</p>
+    </div>
+    <div>
+        <a href="{{ url_for('attendance_cam') }}" class="btn btn-primary">
+            <i class="fa-solid fa-play"></i> Start Camera Stream
+        </a>
+    </div>
+</div>
+
+<!-- Statistics Cards Grid -->
+<div class="stats-grid">
+    <div class="glass-card stat-card">
+        <div class="stat-icon blue">
+            <i class="fa-solid fa-users"></i>
+        </div>
+        <div class="stat-info">
+            <span class="stat-value">{{ stats.total_users }}</span>
+            <span class="stat-label">Registered Users</span>
+        </div>
+    </div>
+    
+    <div class="glass-card stat-card">
+        <div class="stat-icon green">
+            <i class="fa-solid fa-user-check"></i>
+        </div>
+        <div class="stat-info">
+            <span class="stat-value">{{ stats.present_today }}</span>
+            <span class="stat-label">Present Today</span>
+        </div>
+    </div>
+    
+    <div class="glass-card stat-card">
+        <div class="stat-icon purple">
+            <i class="fa-solid fa-percentage"></i>
+        </div>
+        <div class="stat-info">
+            <span class="stat-value">{{ stats.attendance_rate }}%</span>
+            <span class="stat-label">Attendance Rate</span>
+        </div>
+    </div>
+</div>
+
+<!-- Main Dashboard Split Layout -->
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2rem;">
+    <!-- Recent Activity Table -->
+    <div class="glass-card">
+        <h3 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+            <i class="fa-solid fa-clock-rotate-left" style="color: var(--primary-color);"></i> Recent Check-ins
+        </h3>
+        <div class="table-container">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th>User ID</th>
+                        <th>Name</th>
+                        <th>Class/Department</th>
+                        <th>Time</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if recent_records %}
+                        {% for r in recent_records %}
+                            <tr>
+                                <td><strong>{{ r.user_id }}</strong></td>
+                                <td>{{ r.name }}</td>
+                                <td>{{ r.department }}</td>
+                                <td>{{ r.time }}</td>
+                                <td><span class="badge badge-success">{{ r.status }}</span></td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                                No attendance logged today.
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+        {% if recent_records %}
+            <div style="margin-top: 1.5rem; text-align: right;">
+                <a href="{{ url_for('records') }}" style="color: var(--primary-color); text-decoration: none; font-size: 0.9rem; font-weight: 600;">
+                    View all records <i class="fa-solid fa-arrow-right"></i>
+                </a>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Quick Shortcuts Card -->
+    <div class="glass-card">
+        <h3 style="margin-bottom: 1.5rem;">Quick Operations</h3>
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+            <a href="{{ url_for('register') }}" class="btn btn-secondary" style="justify-content: flex-start; text-align: left;">
+                <i class="fa-solid fa-user-plus" style="color: var(--primary-color);"></i> Register New Employee/Student
+            </a>
+            
+            <a href="{{ url_for('users') }}" class="btn btn-secondary" style="justify-content: flex-start; text-align: left;">
+                <i class="fa-solid fa-address-book" style="color: var(--secondary-color);"></i> Manage Registered Accounts
+            </a>
+
+            <a href="{{ url_for('records') }}" class="btn btn-secondary" style="justify-content: flex-start; text-align: left;">
+                <i class="fa-solid fa-file-excel" style="color: var(--accent-color);"></i> Download Attendance Reports
+            </a>
+        </div>
+
+        <div style="margin-top: 2rem; border-top: 1px solid var(--card-border); padding-top: 1.5rem;">
+            <h4 style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.75rem;">System Information</h4>
+            <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">
+                <li><i class="fa-solid fa-circle-check" style="color: var(--success-color);"></i> Database Status: Connected</li>
+                <li><i class="fa-solid fa-circle-check" style="color: var(--success-color);"></i> Camera Module: Ready</li>
+                <li><i class="fa-solid fa-circle-check" style="color: var(--success-color);"></i> Face Engine: Active</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Face Recognition Attendance System{% endblock %}</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+
+    <!-- Persistent Navigation Sidebar -->
+    <nav class="sidebar">
+        <div class="logo-container">
+            <i class="fa-solid fa-face-smile-wink logo-icon"></i>
+            <span class="logo-text">AI Attendance</span>
+        </div>
+        <ul class="nav-links">
+            <li class="nav-item {% if active_page == 'dashboard' %}active{% endif %}">
+                <a href="{{ url_for('dashboard') }}">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>Dashboard</span>
+                </a>
+            </li>
+            <li class="nav-item {% if active_page == 'register' %}active{% endif %}">
+                <a href="{{ url_for('register') }}">
+                    <i class="fa-solid fa-user-plus"></i>
+                    <span>Register User</span>
+                </a>
+            </li>
+            <li class="nav-item {% if active_page == 'attendance_cam' %}active{% endif %}">
+                <a href="{{ url_for('attendance_cam') }}">
+                    <i class="fa-solid fa-camera"></i>
+                    <span>Attendance Camera</span>
+                </a>
+            </li>
+            <li class="nav-item {% if active_page == 'users' %}active{% endif %}">
+                <a href="{{ url_for('users') }}">
+                    <i class="fa-solid fa-users"></i>
+                    <span>Registered Users</span>
+                </a>
+            </li>
+            <li class="nav-item {% if active_page == 'records' %}active{% endif %}">
+                <a href="{{ url_for('records') }}">
+                    <i class="fa-solid fa-clipboard-user"></i>
+                    <span>Attendance Records</span>
+                </a>
+            </li>
+        </ul>
+        
+        <div style="margin-top: auto; font-size: 0.75rem; color: var(--text-muted); text-align: center;">
+            <p>V1.0 Production-Ready</p>
+            <p>&copy; 2026 AI Systems</p>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="main-content">
+        <!-- Page Notification Alert -->
+        <div id="page-alert" class="alert" style="display: none;"></div>
+
+        <!-- Flask Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Inherited Content -->
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Project JavaScript -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

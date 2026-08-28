@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Databases
+database/*.db
+!database/schema.sql
+
+# User uploaded/captured face photos
+static/faces/*
+!static/faces/.gitkeep
+
+# Large precompiled binaries/packages
+*.whl
+
+# IDE configurations
+.idea/
+.vscode/

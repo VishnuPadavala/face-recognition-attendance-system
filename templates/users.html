@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Registered Users - Face Recognition Attendance System{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Registered Accounts</h1>
+        <p class="page-subtitle">View profiles and manage registered employees and students.</p>
+    </div>
+    <div>
+        <a href="{{ url_for('register') }}" class="btn btn-primary">
+            <i class="fa-solid fa-plus"></i> Register New User
+        </a>
+    </div>
+</div>
+
+<!-- Registered Users List Card -->
+<div class="glass-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h3>Database Profiles ({{ users|length }})</h3>
+        
+        <div style="font-size: 0.85rem; color: var(--text-muted);">
+            <i class="fa-solid fa-circle-info"></i> Deleting a user will permanently erase their facial encodings.
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th style="width: 80px;">Profile</th>
+                    <th>User ID</th>
+                    <th>Name</th>
+                    <th>Department</th>
+                    <th>Email</th>
+                    <th>Created At</th>
+                    <th style="text-align: right; width: 120px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if users %}
+                    {% for u in users %}
+                        <tr>
+                            <td>
+                                <div style="width: 45px; height: 45px; border-radius: 50%; overflow: hidden; border: 2px solid var(--card-border); background-color: #0d0f19; display: flex; align-items: center; justify-content: center;">
+                                    <!-- Display the first captured pose photo -->
+                                    <img src="/static/faces/{{ u.user_id }}/img_1.jpg" 
+                                         alt="User Profile" 
+                                         style="width: 100%; height: 100%; object-fit: cover;"
+                                         onerror="this.src='https://api.dicebear.com/7.x/bottts/svg?seed={{ u.user_id }}';">
+                                </div>
+                            </td>
+                            <td><strong>{{ u.user_id }}</strong></td>
+                            <td>{{ u.name }}</td>
+                            <td>{{ u.department }}</td>
+                            <td>{{ u.email if u.email else '<em style="color:var(--text-muted)">N/A</em>'|safe }}</td>
+                            <td style="color: var(--text-secondary); font-size: 0.85rem;">{{ u.created_at }}</td>
+                            <td style="text-align: right;">
+                                <form action="{{ url_for('delete_user_route', user_id=u.user_id) }}" method="POST" onsubmit="return confirm('Are you sure you want to permanently delete this user and all associated face data?');">
+                                    <button type="submit" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; border-radius: 8px;">
+                                        <i class="fa-solid fa-trash-can"></i> Delete
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 3rem;">
+                            <i class="fa-solid fa-folder-open" style="font-size: 2.5rem; margin-bottom: 1rem; display: block; color: var(--text-muted);"></i>
+                            No users registered in the database yet.
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Register User - Face Recognition Attendance System{% endblock %}
+
+{% block content %}
+<!-- Page identifier for JS logic -->
+<div id="register-page"></div>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Register Employee / Student</h1>
+        <p class="page-subtitle">Input user details and capture facial photos to generate encodings.</p>
+    </div>
+</div>
+
+<div class="registration-grid">
+    <!-- Form Inputs Details -->
+    <div class="glass-card">
+        <h3 style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+            <i class="fa-solid fa-id-card" style="color: var(--primary-color);"></i> Personal Details
+        </h3>
+        
+        <form id="register-form">
+            <div class="form-group">
+                <label for="user_id" class="form-label">User ID / Employee ID (Required)</label>
+                <input type="text" id="user_id" class="form-control" placeholder="e.g. EMP001, STU2025" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="name" class="form-label">Full Name (Required)</label>
+                <input type="text" id="name" class="form-control" placeholder="e.g. John Doe" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="department" class="form-label">Class / Department (Required)</label>
+                <select id="department" class="form-control" required>
+                    <option value="" disabled selected>Select class or department</option>
+                    <option value="Computer Science">Computer Science</option>
+                    <option value="Information Technology">Information Technology</option>
+                    <option value="Human Resources">Human Resources</option>
+                    <option value="Engineering">Engineering</option>
+                    <option value="Administration">Administration</option>
+                    <option value="Finance">Finance</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="email" class="form-label">Email Address (Optional)</label>
+                <input type="email" id="email" class="form-control" placeholder="e.g. john.doe@example.com">
+            </div>
+            
+            <div style="margin-top: 2rem;">
+                <button type="submit" id="start-capture-btn" class="btn btn-primary" style="width: 100%;">
+                    <i class="fa-solid fa-camera"></i> Start Registration
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Live Webcam Capture Section (initially hidden) -->
+    <div class="glass-card" id="capture-section" style="display: none;">
+        <h3 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+            <i class="fa-solid fa-circle-dot" style="color: var(--error-color); animation: pulse 1.5s infinite;"></i> Camera Stream
+        </h3>
+        
+        <div class="camera-stream-wrapper">
+            <img id="registration-feed" class="camera-stream" src="" alt="Webcam Feed">
+        </div>
+
+        <div class="progress-container">
+            <div id="registration-progress-bar" class="progress-bar"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem;">
+            <span id="progress-label">Progress: 0/5 captures</span>
+            <span id="capture-status-text">Look directly at the camera...</span>
+        </div>
+
+        <h4 style="margin-top: 2rem; margin-bottom: 0.5rem; font-size: 0.95rem;">Captured Encodings</h4>
+        <div id="capture-gallery" class="capture-gallery">
+            <!-- Captured thumbnails are dynamically appended here by JS -->
+        </div>
+    </div>
+</div>
+
+<style>
+@keyframes pulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.5; }
+    100% { transform: scale(1); opacity: 1; }
+}
+</style>
+{% endblock %}

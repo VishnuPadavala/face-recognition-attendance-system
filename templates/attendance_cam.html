@@ -3,7 +3,6 @@
 {% block title %}Attendance Camera - Face Recognition Attendance System{% endblock %}
 
 {% block content %}
-<!-- Page identifier for JS logic -->
 <div id="attendance-camera-page"></div>
 
 <div class="page-header">
@@ -22,14 +21,22 @@
     <!-- Camera Stream Card -->
     <div class="glass-card camera-card">
         <h3 style="align-self: flex-start; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; width: 100%;">
-            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: var(--success-color); box-shadow: 0 0 10px var(--success-color);"></span> 
-            Webcam Feed (Active)
+            <span id="cam-status-dot" style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: var(--warning-color); box-shadow: 0 0 10px var(--warning-color);"></span>
+            <span id="cam-status-label">Webcam Feed (Connecting...)</span>
         </h3>
-        
-        <div class="camera-stream-wrapper">
-            <img class="camera-stream" src="{{ url_for('attendance_feed') }}" alt="Live Attendance Scanner Feed">
+
+        <!-- Hidden video + canvas for WebRTC rendering + face box overlays -->
+        <div class="camera-stream-wrapper" style="position: relative;">
+            <video id="webcam-video" autoplay playsinline muted style="display: none;"></video>
+            <canvas id="main-canvas" class="camera-stream"
+                    style="width: 100%; border-radius: 8px; background: #0a0a14;"></canvas>
+            <div id="cam-error-msg" style="display:none; position:absolute; top:50%; left:50%;
+                 transform:translate(-50%,-50%); text-align:center; color: var(--error-color); font-size:0.9rem;">
+                <i class="fa-solid fa-circle-exclamation" style="font-size:2rem; display:block; margin-bottom:0.5rem;"></i>
+                Camera access denied.<br>Please allow camera permissions and refresh.
+            </div>
         </div>
-        
+
         <div style="margin-top: 1rem; width: 100%; display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary);">
             <span><i class="fa-solid fa-video" style="color: var(--primary-color);"></i> Camera Resolution: 640x480</span>
             <span><i class="fa-solid fa-expand" style="color: var(--accent-color);"></i> Auto-detecting Face</span>
@@ -67,4 +74,123 @@
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    const video   = document.getElementById('webcam-video');
+    const canvas  = document.getElementById('main-canvas');
+    const ctx     = canvas.getContext('2d');
+    const dot     = document.getElementById('cam-status-dot');
+    const label   = document.getElementById('cam-status-label');
+    const errMsg  = document.getElementById('cam-error-msg');
+
+    let isProcessing = false;
+    let mediaStream  = null;
+    let latestFaces  = [];   // cache latest results for smooth overlay redraw
+
+    // 1. Start browser webcam
+    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false })
+        .then(stream => {
+            mediaStream = stream;
+            video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                canvas.width  = video.videoWidth;
+                canvas.height = video.videoHeight;
+                dot.style.background  = 'var(--success-color)';
+                dot.style.boxShadow   = '0 0 10px var(--success-color)';
+                label.textContent     = 'Webcam Feed (Active)';
+                renderLoop();        // smooth 30 fps canvas render
+                recognitionLoop();   // POST frame to server every 600 ms
+            };
+        })
+        .catch(err => {
+            console.error('Camera error:', err);
+            dot.style.background = 'var(--error-color)';
+            label.textContent    = 'Camera Error';
+            errMsg.style.display = 'block';
+        });
+
+    // 2. Continuous render loop — draw video + bounding boxes on canvas
+    function renderLoop() {
+        if (video.readyState >= 2) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        }
+        latestFaces.forEach(face => {
+            const [x, y, w, h] = face.box;
+            const color = face.matched ? '#81B910' : '#EF4444';
+            const text  = face.matched
+                ? face.name + (face.department ? ' (' + face.department + ')' : '')
+                : 'Unknown Person';
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth   = 2;
+            ctx.strokeRect(x, y, w, h);
+
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y + h - 30, w, 30);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font      = 'bold 13px Inter, Arial, sans-serif';
+            ctx.fillText(text, x + 6, y + h - 10);
+        });
+        requestAnimationFrame(renderLoop);
+    }
+
+    // 3. POST a frame to Flask /api/recognize_frame every 600 ms
+    function recognitionLoop() {
+        setInterval(async () => {
+            if (isProcessing || !mediaStream) return;
+            isProcessing = true;
+
+            const cap = document.createElement('canvas');
+            cap.width  = canvas.width;
+            cap.height = canvas.height;
+            cap.getContext('2d').drawImage(video, 0, 0);
+            const imgData = cap.toDataURL('image/jpeg', 0.7);
+
+            try {
+                const resp   = await fetch('/api/recognize_frame', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ image: imgData })
+                });
+                const result = await resp.json();
+                if (result.success) {
+                    latestFaces = result.faces;
+                    result.faces.filter(f => f.matched).forEach(addToLogTable);
+                }
+            } catch (e) {
+                console.warn('Recognition error:', e);
+            }
+            isProcessing = false;
+        }, 600);
+    }
+
+    // 4. Add matched face to the live log table
+    const shownToday = new Set();
+    function addToLogTable(face) {
+        if (shownToday.has(face.user_id)) return;
+        shownToday.add(face.user_id);
+
+        const tbody = document.getElementById('recent-logs-tbody');
+        const placeholder = tbody.querySelector('td[colspan]');
+        if (placeholder) placeholder.closest('tr').remove();
+
+        const now = new Date().toLocaleTimeString();
+        const tr  = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${face.user_id}</td>
+            <td>${face.name}</td>
+            <td>${face.department}</td>
+            <td>${now}</td>
+            <td><span class="badge badge-success">Present</span></td>`;
+        tbody.insertAdjacentElement('afterbegin', tr);
+    }
+
+    // 5. Stop camera when leaving the page
+    window.addEventListener('beforeunload', () => {
+        if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+    });
+})();
+</script>
 {% endblock %}

@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, Response, redirect, url_for, jsonify, flash, send_file
 import os
 import cv2
+import base64
 import time
 import numpy as np
 from datetime import datetime
@@ -12,7 +13,6 @@ from backend.user import UserManager
 from backend.face_detection import FaceDetector
 from backend.face_recognition import FaceRecognizer
 from backend.attendance import AttendanceManager
-from backend.camera import VideoCamera
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -32,6 +32,7 @@ attendance_manager = AttendanceManager(db)
 
 # Global variables/cache
 known_encodings_cache = {}
+last_marked_cache = {}  # user_id -> datetime of last attendance mark (cooldown)
 
 def update_encodings_cache():
     """
@@ -201,73 +202,72 @@ def api_register_init():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
-@app.route('/api/register/capture_frame')
-def api_register_capture_frame():
+@app.route('/api/register/capture_frame_upload', methods=['POST'])
+def api_register_capture_frame_upload():
     """
-    Triggered sequentially by the frontend. Grabs the webcam frame,
-    verifies a single face is visible, generates encoding, and saves file.
+    Accepts a base64-encoded JPEG frame from the browser webcam (WebRTC).
+    Verifies a single face is visible, generates encoding, and saves file.
     """
-    user_id = request.args.get('user_id')
-    index = request.args.get('index')
-    
-    if not user_id or not index:
-        return jsonify({'success': False, 'message': 'Missing user_id or index'}), 400
-        
-    camera = VideoCamera.get_instance()
-    if not camera:
-        return jsonify({'success': False, 'message': 'Webcam is not initialized.'})
-        
-    frame = camera.get_frame()
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'message': 'No data provided'}), 400
+
+    user_id = data.get('user_id')
+    index = data.get('index')
+    image_data = data.get('image')
+
+    if not user_id or index is None or not image_data:
+        return jsonify({'success': False, 'message': 'Missing user_id, index, or image'}), 400
+
+    # Decode base64 image from browser
+    frame = decode_base64_image(image_data)
     if frame is None:
-        return jsonify({'success': False, 'message': 'Failed to grab frame from webcam.'})
-        
+        return jsonify({'success': False, 'message': 'Invalid image data received.'}), 400
+
     # Process image for face detection
     boxes = face_detector.detect_faces(frame)
-    
+
     if len(boxes) == 0:
         return jsonify({'success': False, 'message': 'No face detected. Please center your face.'})
     if len(boxes) > 1:
         return jsonify({'success': False, 'message': 'Multiple faces detected. Please make sure only one person is in frame.'})
-        
-    # Get the bounding box of the face
+
     face_box = boxes[0]
-    
-    # Generate RGB image for face_recognition
+
+    # Generate RGB image for face_recognition library
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    
+
     # Extract encoding using dlib
     encodings = face_recognizer.get_face_encodings(rgb_frame, cv2_boxes=[face_box])
-    
+
     if len(encodings) == 0:
         return jsonify({'success': False, 'message': 'Failed to extract face features. Try adjusting the lighting.'})
-        
+
     encoding = encodings[0]
-    
+
     try:
         # Save encoding to SQLite
         user_manager.add_face_encoding(user_id, encoding)
-        
-        # Save image to static folder
+
+        # Save image file to static folder for thumbnail display
         user_faces_dir = os.path.join(app.root_path, "static", "faces", user_id)
         os.makedirs(user_faces_dir, exist_ok=True)
-        
-        # Save cropped or full frame? Full frame is preferred for backup references,
-        # but let's draw a nice bounding box on a copy and save it for thumbnail visual confirmation!
+
         img_name = f"img_{index}.jpg"
         img_path = os.path.join(user_faces_dir, img_name)
         cv2.imwrite(img_path, frame)
-        
+
         # Refresh global encodings cache after the final photo capture
         if int(index) == 5:
             update_encodings_cache()
-            
+
         return jsonify({
-            'success': True, 
+            'success': True,
             'message': f'Capture {index}/5 complete.',
             'image_path': f'/static/faces/{user_id}/{img_name}'
         })
     except Exception as e:
-        logger.error(f"Error during capture: {e}")
+        logger.error(f"Error during capture upload: {e}")
         return jsonify({'success': False, 'message': f'Save failed: {e}'})
 
 @app.route('/api/recent_attendance')
@@ -290,167 +290,99 @@ def api_recent_attendance():
         
     return jsonify({'success': True, 'records': serialized_records})
 
-# ----------------- MJPEG Camera Streaming Generators -----------------
 
-def gen_registration_stream(user_id):
+# ----------------- Helper Functions -----------------
+
+def decode_base64_image(data_url):
     """
-    Generator yielding webcam frames with a simple bounding box
-    for user registration.
+    Decodes a base64-encoded image data URL (from browser canvas/WebRTC)
+    into an OpenCV BGR numpy array.
     """
-    camera = VideoCamera()
-    logger.info(f"Registration camera stream opened for user: {user_id}")
     try:
-        while True:
-            frame = camera.get_frame()
-            if frame is None:
-                time.sleep(0.05)
-                continue
-                
-            # Draw helper face bounds box
-            boxes = face_detector.detect_faces(frame)
-            for (x, y, w, h) in boxes:
-                # Draw sleek indigo bounding box
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (241, 102, 99), 2)
-                cv2.putText(frame, "Align Face", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (241, 102, 99), 1)
+        # Strip the data URL prefix (e.g. "data:image/jpeg;base64,")
+        if ',' in data_url:
+            data_url = data_url.split(',')[1]
+        img_bytes = base64.b64decode(data_url)
+        np_arr = np.frombuffer(img_bytes, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        return frame
+    except Exception as e:
+        logger.error(f"Failed to decode base64 image: {e}")
+        return None
 
-            # Encode as JPEG
-            ret, jpeg = cv2.imencode('.jpg', frame)
-            if not ret:
-                continue
-                
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n\r\n')
-            time.sleep(0.04) # ~25 fps
-    finally:
-        camera.release()
-        logger.info(f"Registration camera stream released for user: {user_id}")
 
-def gen_attendance_stream():
-    """
-    Core attendance stream processing frames in real-time.
-    Resizes images, runs recognition against cached database encodings,
-    marks attendance, and overlays labels on frames.
-    """
-    camera = VideoCamera()
-    logger.info("Attendance camera stream opened.")
-    
-    # Reload cached encodings from DB
-    global known_encodings_cache
-    update_encodings_cache()
-    
-    # Keep track of local scan states to avoid hitting DB lock or logging repeatedly in memory
-    last_marked_cache = {}  # user_id -> timestamp of last match attempt
+# ----------------- Browser-Based Face Recognition API -----------------
 
-    try:
-        while True:
-            frame = camera.get_frame()
-            if frame is None:
-                time.sleep(0.05)
-                continue
-                
-            # Create a copy for recognition to run on smaller dimensions (increases speed significantly!)
-            small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-            # Convert color space BGR -> RGB
-            rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-            
-            # Detect faces on small frame
-            small_boxes = face_detector.detect_faces(small_frame)
-            
-            if len(small_boxes) > 0:
-                # Get encodings for detected faces using HOG
-                encodings = face_recognizer.get_face_encodings(rgb_small_frame, cv2_boxes=small_boxes)
-                
-                for box, encoding in zip(small_boxes, encodings):
-                    # Scale boxes back to original 100% size
-                    sx, sy, sw, sh = box
-                    x, y, w, h = sx * 4, sy * 4, sw * 4, sh * 4
-                    
-                    # Match query encoding against global in-memory DB cache
-                    matched_user_id = face_recognizer.match_face(encoding, known_encodings_cache)
-                    
-                    if matched_user_id:
-                        # Fetch user details
-                        user_info = user_manager.get_user(matched_user_id)
-                        name = user_info['name'] if user_info else matched_user_id
-                        dept = user_info['department'] if user_info else ""
-                        
-                        # Mark attendance on background DB
-                        now = datetime.now()
-                        date_str = now.strftime('%Y-%m-%d')
-                        time_str = now.strftime('%H:%M:%S')
-                        
-                        # Limit SQLite inserts to once per user per 5 seconds in memory to avoid log spam,
-                        # database constraint will block double records on the daily level.
-                        last_time = last_marked_cache.get(matched_user_id)
-                        if last_time is None or (now - last_time).seconds > 10:
-                            success, msg = attendance_manager.mark_attendance(matched_user_id, date_str, time_str)
-                            last_marked_cache[matched_user_id] = now
-                            
-                        # Overlay Green Border + Name
-                        cv2.rectangle(frame, (x, y), (x + w, y + h), (129, 185, 16), 2)
-                        
-                        # Draw label box
-                        cv2.rectangle(frame, (x, y + h - 35), (x + w, y + h), (129, 185, 16), cv2.FILLED)
-                        cv2.putText(
-                            frame, 
-                            f"{name} ({dept})", 
-                            (x + 6, y + h - 10), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 
-                            0.5, 
-                            (255, 255, 255), 
-                            1, 
-                            cv2.LINE_AA
-                        )
-                    else:
-                        # Unknown Face
-                        # Overlay Red Border + Unknown Person label
-                        cv2.rectangle(frame, (x, y), (x + w, y + h), (68, 68, 239), 2)
-                        cv2.rectangle(frame, (x, y + h - 35), (x + w, y + h), (68, 68, 239), cv2.FILLED)
-                        cv2.putText(
-                            frame, 
-                            "Unknown Person", 
-                            (x + 6, y + h - 10), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 
-                            0.55, 
-                            (255, 255, 255), 
-                            1, 
-                            cv2.LINE_AA
-                        )
+@app.route('/api/recognize_frame', methods=['POST'])
+def api_recognize_frame():
+    """
+    Accepts a base64-encoded JPEG frame from the user's browser webcam (WebRTC/Canvas).
+    Runs face detection + recognition and returns matched face details as JSON.
+    The browser overlays bounding boxes and names on a canvas element.
+    """
+    global last_marked_cache
 
-            # Encode frame to JPEG
-            ret, jpeg = cv2.imencode('.jpg', frame)
-            if not ret:
-                continue
-                
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n\r\n')
-            time.sleep(0.033)  # ~30 FPS
-            
-    finally:
-        camera.release()
-        logger.info("Attendance camera stream released.")
+    data = request.get_json()
+    if not data or 'image' not in data:
+        return jsonify({'success': False, 'message': 'No image provided'}), 400
 
-@app.route('/register_feed')
-def register_feed():
-    """
-    Video streaming route for user registration.
-    """
-    user_id = request.args.get('user_id', '')
-    return Response(gen_registration_stream(user_id), mimetype='multipart/x-mixed-replace; boundary=frame')
+    frame = decode_base64_image(data['image'])
+    if frame is None:
+        return jsonify({'success': False, 'message': 'Invalid image data'}), 400
 
-@app.route('/attendance_feed')
-def attendance_feed():
-    """
-    Video streaming route for live attendance scanning.
-    """
-    return Response(gen_attendance_stream(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    # Scale down for faster processing (same as original streaming pipeline)
+    small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+    rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+
+    # Detect faces on the smaller frame
+    small_boxes = face_detector.detect_faces(small_frame)
+
+    faces = []
+    if len(small_boxes) > 0:
+        encodings = face_recognizer.get_face_encodings(rgb_small_frame, cv2_boxes=small_boxes)
+
+        now = datetime.now()
+        date_str = now.strftime('%Y-%m-%d')
+        time_str = now.strftime('%H:%M:%S')
+
+        for box, encoding in zip(small_boxes, encodings):
+            # Scale bounding box back to original frame size
+            sx, sy, sw, sh = box
+            x, y, w, h = int(sx * 4), int(sy * 4), int(sw * 4), int(sh * 4)
+
+            matched_user_id = face_recognizer.match_face(encoding, known_encodings_cache)
+
+            if matched_user_id:
+                user_info = user_manager.get_user(matched_user_id)
+                name = user_info['name'] if user_info else matched_user_id
+                dept = user_info['department'] if user_info else ''
+
+                # Cooldown: only mark attendance once per user per 10 seconds
+                last_time = last_marked_cache.get(matched_user_id)
+                if last_time is None or (now - last_time).seconds > 10:
+                    attendance_manager.mark_attendance(matched_user_id, date_str, time_str)
+                    last_marked_cache[matched_user_id] = now
+
+                faces.append({
+                    'matched': True,
+                    'user_id': matched_user_id,
+                    'name': name,
+                    'department': dept,
+                    'box': [x, y, w, h]
+                })
+            else:
+                faces.append({
+                    'matched': False,
+                    'name': 'Unknown',
+                    'department': '',
+                    'box': [x, y, w, h]
+                })
+
+    return jsonify({'success': True, 'faces': faces})
+
+
 
 # ----------------- Application Entrypoint -----------------
 
 if __name__ == '__main__':
-    # Clean up any leftover camera instances in case of a crash or restart
-    camera = VideoCamera.get_instance()
-    if camera:
-        camera.release()
-        
-    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False, threaded=True)

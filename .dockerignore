@@ -1,0 +1,11 @@
+﻿__pycache__/
+*.pyc
+*.pyo
+.venv/
+.git/
+.gitignore
+*.whl
+test_*.py
+start_server.bat
+database/test_*.db
+*.md

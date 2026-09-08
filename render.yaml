@@ -1,9 +1,12 @@
-﻿services:
+services:
   - type: web
     name: face-recognition-attendance
     env: docker
     plan: free
     dockerfilePath: ./Dockerfile
+    healthCheckPath: /
     envVars:
       - key: FLASK_ENV
         value: production
+      - key: PORT
+        value: 10000
